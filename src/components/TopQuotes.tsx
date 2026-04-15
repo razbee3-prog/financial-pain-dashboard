@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CATEGORY_COLORS } from "@/lib/utils";
-import { ArrowUp, ExternalLink } from "lucide-react";
+import { ArrowUp, ExternalLink, RefreshCw } from "lucide-react";
 
 interface Quote {
   rawQuote: string;
@@ -15,63 +15,85 @@ interface Quote {
 
 export default function TopQuotes() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadQuotes = useCallback(() => {
+    setRefreshing(true);
+    fetch("/api/top-quotes", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setQuotes(d.quotes))
+      .finally(() => setRefreshing(false));
+  }, []);
 
   useEffect(() => {
-    fetch("/api/top-quotes")
-      .then((r) => r.json())
-      .then((d) => setQuotes(d.quotes));
-  }, []);
+    loadQuotes();
+  }, [loadQuotes]);
 
   if (!quotes.length) return null;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {quotes.map((q, i) => {
-        const source =
-          q.subreddit === "x/twitter" ? "x.com" : `r/${q.subreddit}`;
-        const url =
-          q.subreddit === "x/twitter"
-            ? q.permalink || "#"
-            : `https://reddit.com${q.permalink}`;
+    <div className="relative">
+      <button
+        onClick={loadQuotes}
+        disabled={refreshing}
+        className="absolute -top-2 right-0 w-7 h-7 flex items-center justify-center rounded-md text-muted hover:text-foreground hover:bg-[var(--hover-strong)] transition-colors disabled:opacity-30"
+        style={{ transition: "var(--transition)" }}
+        aria-label="Rotate top quotes"
+      >
+        <RefreshCw
+          size={13}
+          className={refreshing ? "animate-spin" : ""}
+        />
+      </button>
 
-        return (
-          <div
-            key={i}
-            className="border-l-2 pl-4 py-2"
-            style={{ borderLeftColor: CATEGORY_COLORS[q.category] || "#71717a" }}
-          >
-            <p className="text-sm text-foreground leading-snug">
-              &ldquo;{q.rawQuote}&rdquo;
-            </p>
-            <div className="flex items-center gap-2 mt-2 text-[10px] text-muted">
-              <span
-                className="px-1.5 py-0.5 rounded font-medium"
-                style={{
-                  backgroundColor: `${CATEGORY_COLORS[q.category] || "#71717a"}18`,
-                  color: CATEGORY_COLORS[q.category] || "#71717a",
-                }}
-              >
-                {q.category}
-              </span>
-              <span className="flex items-center gap-0.5 tabular-nums">
-                <ArrowUp size={9} />{q.upvotes}
-              </span>
-              <span>{source}</span>
-              {q.permalink && (
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-accent transition-colors"
-                  style={{ transition: "var(--transition)" }}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {quotes.map((q, i) => {
+          const source =
+            q.subreddit === "x/twitter" ? "x.com" : `r/${q.subreddit}`;
+          const url =
+            q.subreddit === "x/twitter"
+              ? q.permalink || "#"
+              : `https://reddit.com${q.permalink}`;
+
+          return (
+            <div
+              key={`${i}-${q.rawQuote.slice(0, 20)}`}
+              className="border-l-2 pl-4 py-2"
+              style={{ borderLeftColor: CATEGORY_COLORS[q.category] || "#71717a" }}
+            >
+              <p className="text-sm text-foreground leading-snug">
+                &ldquo;{q.rawQuote}&rdquo;
+              </p>
+              <div className="flex items-center gap-2 mt-2 text-[10px] text-muted">
+                <span
+                  className="px-1.5 py-0.5 rounded font-medium"
+                  style={{
+                    backgroundColor: `${CATEGORY_COLORS[q.category] || "#71717a"}18`,
+                    color: CATEGORY_COLORS[q.category] || "#71717a",
+                  }}
                 >
-                  <ExternalLink size={9} />
-                </a>
-              )}
+                  {q.category}
+                </span>
+                <span className="flex items-center gap-0.5 tabular-nums">
+                  <ArrowUp size={9} />{q.upvotes}
+                </span>
+                <span>{source}</span>
+                {q.permalink && (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-accent transition-colors"
+                    style={{ transition: "var(--transition)" }}
+                  >
+                    <ExternalLink size={9} />
+                  </a>
+                )}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
