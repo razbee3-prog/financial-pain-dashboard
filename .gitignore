@@ -44,6 +44,10 @@ worker/__pycache__/
 worker/venv/
 worker/.venv/
 
+# aws lambda build artifacts
+aws-lambda/package/
+aws-lambda/package.zip
+
 # vercel
 .vercel
 
