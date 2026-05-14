@@ -28,6 +28,64 @@ const SEV_EMOJI: Record<string, string> = {
   low: "🟩",
 };
 
+const SEV_WEIGHT: Record<string, number> = {
+  critical: 4.0,
+  high: 2.5,
+  medium: 1.5,
+  low: 1.0,
+};
+
+const MIN_ENGAGEMENT = 10;
+
+function daysSince(iso: string): number {
+  if (!iso) return 9999;
+  const ms = Date.now() - new Date(iso).getTime();
+  return ms / 86_400_000;
+}
+
+function scorePost(p: PainPoint): number {
+  const base = (p.upvotes || 0) + (p.comment_count || 0);
+  const sev = SEV_WEIGHT[p.severity] ?? 1.0;
+  const recency = Math.pow(0.5, daysSince(p.created_at) / 7); // 7-day half-life
+  return base * sev * recency;
+}
+
+/**
+ * Pick 5 posts that are:
+ *   - fresh (scraped in last 7 days; fallback 14d, then any)
+ *   - high-engagement (>= MIN_ENGAGEMENT)
+ *   - score-ranked (engagement × severity × recency)
+ *   - category-diverse (max 1 per category)
+ */
+function pickTop5Fresh(posts: PainPoint[]): PainPoint[] {
+  const hasQuote = (p: PainPoint) => !!p.raw_quote;
+  const passesFloor = (p: PainPoint) =>
+    (p.upvotes || 0) + (p.comment_count || 0) >= MIN_ENGAGEMENT;
+
+  const inWindow = (days: number) =>
+    posts.filter(
+      (p) => hasQuote(p) && passesFloor(p) && daysSince(p.scraped_at) <= days
+    );
+
+  let candidates = inWindow(7);
+  if (candidates.length < 5) candidates = inWindow(14);
+  if (candidates.length < 5)
+    candidates = posts.filter((p) => hasQuote(p) && passesFloor(p));
+
+  const sorted = candidates.sort((a, b) => scorePost(b) - scorePost(a));
+
+  const seen: Record<string, number> = {};
+  const picks: PainPoint[] = [];
+  for (const p of sorted) {
+    const cat = p.category || "";
+    if ((seen[cat] || 0) >= 1) continue;
+    picks.push(p);
+    seen[cat] = (seen[cat] || 0) + 1;
+    if (picks.length >= 5) break;
+  }
+  return picks;
+}
+
 function highestSeverity(posts: PainPoint[]): string {
   let best = "low";
   for (const p of posts) {
@@ -75,16 +133,8 @@ export function buildSlackMessage(dashboardUrl: string): {
 
   const topCat = categoryRows[0];
 
-  // Top 5 by engagement
-  const top5 = [...posts]
-    .filter((p) => p.raw_quote)
-    .sort(
-      (a, b) =>
-        (b.upvotes || 0) +
-        (b.comment_count || 0) -
-        ((a.upvotes || 0) + (a.comment_count || 0))
-    )
-    .slice(0, 5);
+  // Top 5 — fresh, severity-weighted, diversified
+  const top5 = pickTop5Fresh(posts);
 
   const digest = getLatestDigest();
   const takeaways: string[] = digest ? JSON.parse(digest.content) : [];
