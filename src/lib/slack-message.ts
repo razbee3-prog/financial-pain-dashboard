@@ -200,20 +200,6 @@ export function buildSlackMessage(dashboardUrl: string): {
     }
   }
 
-  // Category breakdown — compact mrkdwn "table"
-  blocks.push({ type: "divider" });
-  const catLines = categoryRows
-    .slice(0, 10)
-    .map(
-      (r) =>
-        `${SEV_EMOJI[r.severity] || "⬜"} *${esc(r.name)}*  —  ${r.count} (${r.pct}%)`
-    )
-    .join("\n");
-  blocks.push({
-    type: "section",
-    text: { type: "mrkdwn", text: `*📊 Category breakdown*\n${catLines}` },
-  });
-
   blocks.push({
     type: "context",
     elements: [
